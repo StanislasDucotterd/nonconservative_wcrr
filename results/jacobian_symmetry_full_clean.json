@@ -1,0 +1,17 @@
+{
+ "checkpoint": "trained_models/nonconservative_wcrr/last.pth",
+ "n_images": 68,
+ "probes": 16,
+ "power": 40,
+ "sigma": 25.0,
+ "results": {
+  "natural / clean": {
+   "asym_fro_mean": 0.035424772064990714,
+   "asym_fro_min": 0.022411194317078026,
+   "asym_fro_max": 0.08837492474198232,
+   "asym_spec_mean": 0.03759294937724731,
+   "asym_spec_min": 0.029229548241617727,
+   "asym_spec_max": 0.053095929000546487
+  }
+ }
+}

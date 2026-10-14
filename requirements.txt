@@ -1,0 +1,11 @@
+torch>=2.5
+numpy
+h5py
+pyyaml
+tqdm
+matplotlib
+pillow
+# optional: TensorBoard logging of the training runs
+tensorboard
+# sparse-view CT (scripts/ct_reconstruction.py, scripts/ct_residuals.py): odl and astra-toolbox (conda-forge) and
+# torchmetrics, plus a clone of https://github.com/StanislasDucotterd/MFoE for the operators, the search and the data

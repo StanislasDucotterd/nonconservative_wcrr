@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+data/*.h5
+exps/
+trained_models/*/tensorboard_logs/
+trained_models/*/stdout.log
+trained_models/*/best.pth
+results/ct/*/pred_*.pt
+figures/*.png

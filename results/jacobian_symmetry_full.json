@@ -1,0 +1,41 @@
+{
+ "checkpoint": "trained_models/nonconservative_wcrr/last.pth",
+ "n_images": 68,
+ "probes": 16,
+ "power": 40,
+ "sigma": 25.0,
+ "results": {
+  "natural / input": {
+   "asym_fro_mean": 0.15598195405135556,
+   "asym_fro_min": 0.15438807215157624,
+   "asym_fro_max": 0.15900074639391718,
+   "asym_spec_mean": 0.09057286221540431,
+   "asym_spec_min": 0.06575450920046096,
+   "asym_spec_max": 0.10624297068433167
+  },
+  "natural / fixed point": {
+   "asym_fro_mean": 0.02407019841219731,
+   "asym_fro_min": 0.02033097661708308,
+   "asym_fro_max": 0.038088851071237155,
+   "asym_spec_mean": 0.0387054437025327,
+   "asym_spec_min": 0.029625843064194666,
+   "asym_spec_max": 0.04452327553940985
+  },
+  "white noise / input": {
+   "asym_fro_mean": 0.15593753140190736,
+   "asym_fro_min": 0.15517012135475586,
+   "asym_fro_max": 0.15697410506834858,
+   "asym_spec_mean": 0.0897198583469024,
+   "asym_spec_min": 0.07103619318186047,
+   "asym_spec_max": 0.10787110420826396
+  },
+  "white noise / fixed point": {
+   "asym_fro_mean": 0.019075202104366622,
+   "asym_fro_min": 0.019014122837922785,
+   "asym_fro_max": 0.01915217254457118,
+   "asym_spec_mean": 0.04033817918080518,
+   "asym_spec_min": 0.039299388208614956,
+   "asym_spec_max": 0.042241098160441824
+  }
+ }
+}

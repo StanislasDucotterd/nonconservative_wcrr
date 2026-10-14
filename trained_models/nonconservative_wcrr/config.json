@@ -1,0 +1,94 @@
+{
+  "data": {
+    "augment": true,
+    "batch_size": 64,
+    "num_workers": 6,
+    "patch_size": 64,
+    "train_file": "data/bsd400.h5",
+    "val_every": 50,
+    "val_file": "data/bsd68.h5",
+    "val_max_items": null,
+    "val_noise_seed": 1234
+  },
+  "denoiser": {
+    "backward": "anderson",
+    "bwd_max_iter": 50,
+    "bwd_tol": 0.001,
+    "max_iter": 1000,
+    "solver": "agd",
+    "step": "auto",
+    "step_scale": 1.0,
+    "stop": "change",
+    "tol": 0.0001
+  },
+  "exp_name": "nonconservative_wcrr",
+  "log_dir": "trained_models",
+  "model": {
+    "activation": {
+      "alpha_init": 1.0,
+      "antisymmetric": true,
+      "default_sigma": 25.0,
+      "lambda_init": 54.6,
+      "n_knots": 101,
+      "scales": "crr_sigma",
+      "shared": true,
+      "sigma_knots": 11,
+      "sigma_range": [
+        0,
+        30
+      ],
+      "sigma_spline_init": 5.0,
+      "slope_max": 1.0,
+      "slope_min": -1.0,
+      "span": 0.1,
+      "type": "spline"
+    },
+    "channels": [
+      1,
+      4,
+      8,
+      64
+    ],
+    "group_size": 1,
+    "hidden_1x1": false,
+    "kernel_sizes": [
+      5,
+      5,
+      5
+    ],
+    "normalize_full": true,
+    "untied": "delta_last",
+    "zero_mean": true
+  },
+  "seed": 0,
+  "sigma": 25,
+  "sigma_range": [
+    0,
+    30
+  ],
+  "train": {
+    "diag_every": 0,
+    "epochs": 1000,
+    "grad_clip": null,
+    "loss": "l1",
+    "lr_end": 0.0005,
+    "lr_mult": {
+      "activation": 1.0,
+      "linear": 1.0
+    },
+    "lr_start": 0.005,
+    "min_converged_frac": 0.0,
+    "penalties": {
+      "monotone": 0.0,
+      "smooth": 0.0,
+      "symmetric": 0.0,
+      "tv2": 0.0
+    },
+    "tensorboard": true
+  },
+  "val_sigmas": [
+    25,
+    5,
+    15
+  ]
+}

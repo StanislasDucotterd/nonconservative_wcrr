@@ -1,0 +1,57 @@
+# The non-conservative model of the paper: the WCRR architecture with a freely learned second filter bank.
+#   W: three zero-padded 5x5 convolutions 1 -> 4 -> 8 -> 64 (64 filters of 13x13), zero-mean first layer, ||W||_2 = 1
+#   V = (K3 + Delta) K2 K1 / ||.||_2 (untied: delta_last), Delta = 0 at initialisation
+#   activation: one antisymmetric linear spline shared by the 64 channels, 101 knots on [-0.1, 0.1], slopes in [-1, 1],
+#               WCRR noise-level scaling alpha_c(sigma) = exp(s_c(sigma)) / (sigma + 1e-5), s_c a spline with 11 knots on [0, 30],
+#               one global strength lambda
+#   training: BSD400 64x64 crops (D4 augmentation), batch 64, sigma ~ U(0, 30) per sample (0-255 units), L1 loss,
+#             Adam 5e-3 -> 5e-4 (exponential) over 1000 epochs of 6 steps, SAGD forward (relative change 1e-4, at most
+#             1000 iterations), Anderson on the adjoint system (50 iterations, 1e-3), validation on BSD68 at sigma 25 / 5 / 15
+exp_name: nonconservative_wcrr
+log_dir: trained_models
+seed: 0
+sigma: 25
+sigma_range: [0, 30]
+val_sigmas: [25, 5, 15]
+data:
+  train_file: data/bsd400.h5
+  val_file: data/bsd68.h5
+  patch_size: 64
+  augment: true
+  batch_size: 64
+  num_workers: 6
+  val_every: 50
+  val_noise_seed: 1234
+  val_max_items: null
+model:
+  channels: [1, 4, 8, 64]
+  kernel_sizes: [5, 5, 5]
+  hidden_1x1: false
+  normalize_full: true
+  zero_mean: true
+  group_size: 1
+  untied: delta_last
+  activation: {type: spline, scales: crr_sigma, shared: true, antisymmetric: true, n_knots: 101, span: 0.1,
+               slope_min: -1.0, slope_max: 1.0, lambda_init: 54.6, alpha_init: 1.0,
+               sigma_knots: 11, sigma_range: [0, 30], sigma_spline_init: 5.0, default_sigma: 25.0}
+denoiser:
+  solver: agd
+  stop: change
+  tol: 1.0e-4
+  max_iter: 1000
+  step: auto
+  step_scale: 1.0
+  backward: anderson
+  bwd_tol: 1.0e-3
+  bwd_max_iter: 50
+train:
+  epochs: 1000
+  lr_start: 0.005
+  lr_end: 0.0005
+  lr_mult: {linear: 1.0, activation: 1.0}
+  loss: l1
+  penalties: {tv2: 0.0}
+  grad_clip: null
+  min_converged_frac: 0.0
+  diag_every: 0
+  tensorboard: true
