@@ -15,7 +15,7 @@ nmax = int(sys.argv[3]) if len(sys.argv) > 3 else None  # plot only the first nm
 plt.rcParams.update({"font.family": "serif", "font.size": 8, "axes.labelsize": 8, "legend.fontsize": 7, "xtick.labelsize": 7, "ytick.labelsize": 7,
                      "axes.linewidth": 0.5, "lines.linewidth": 1.0, "pdf.fonttype": 42})
 R = json.load(open(src))
-labels = {"ours": "ours", "wcrr": "WCRR"}
+labels = {"ours": "untied WCRR", "wcrr": "WCRR"}
 colors = {"ours": "#d62728", "wcrr": "#1f77b4"}
 fig, ax = plt.subplots(figsize=(3.4, 1.6))
 for m, r in R["models"].items():
