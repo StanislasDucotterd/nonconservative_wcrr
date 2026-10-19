@@ -3,7 +3,7 @@
 #   V = (K3 + Delta) K2 K1 / ||.||_2 (untied: delta_last), Delta = 0 at initialisation
 #   activation: one antisymmetric linear spline shared by the 64 channels, 101 knots on [-0.1, 0.1], slopes in [-1, 1],
 #               WCRR noise-level scaling alpha_c(sigma) = exp(s_c(sigma)) / (sigma + 1e-5), s_c a spline with 11 knots on [0, 30],
-#               one global strength lambda
+#               one global strength mu
 #   training: BSD400 64x64 crops (D4 augmentation), batch 64, sigma ~ U(0, 30) per sample (0-255 units), L1 loss,
 #             Adam 5e-3 -> 5e-4 (exponential) over 1000 epochs of 6 steps, SAGD forward (relative change 1e-4, at most
 #             1000 iterations), Anderson on the adjoint system (50 iterations, 1e-3), validation on BSD68 at sigma 25 / 5 / 15
@@ -32,7 +32,7 @@ model:
   group_size: 1
   untied: delta_last
   activation: {type: spline, scales: crr_sigma, shared: true, antisymmetric: true, n_knots: 101, span: 0.1,
-               slope_min: -1.0, slope_max: 1.0, lambda_init: 54.6, alpha_init: 1.0,
+               slope_min: -1.0, slope_max: 1.0, mu_init: 54.6, alpha_init: 1.0,
                sigma_knots: 11, sigma_range: [0, 30], sigma_spline_init: 5.0, default_sigma: 25.0}
 denoiser:
   solver: agd

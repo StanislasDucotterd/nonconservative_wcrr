@@ -72,28 +72,32 @@ def spline_lookup(u, mu_over_h, mid_t, table, offsets, K, compiled=False):
 
 class LinearSplineActivation(GroupActivation):
     """Learnable univariate linear spline (CRR / WCRR style), applied componentwise:
-        Phi_c(u) = lam * phi_c(alpha_c u) / alpha_c,
+        Phi_c(u) = mu * phi_c(alpha_c u) / alpha_c,
     phi_c continuous piecewise-linear on K uniform knots of [-span, span] (K odd: 0 is a knot), constant outside,
     parametrised by its K-1 slopes clamped to [slope_min, slope_max] (default [-1, 1]: 1-Lipschitz, NOT forced to be
     increasing), anchored at phi_c(0) = 0 and ZERO at init. shared=True: one spline phi for every channel (WCRR's layout),
     the scales stay per channel. antisymmetric=True: odd phi (even potential), only the right half of the slopes is learned.
     Scales:
-      scales='crr'       alpha_c per channel and one global strength lam (WCRR's mechanism at a fixed noise level), both
-                         log-parametrised: Phi_c(u) = lam * phi_c(alpha_c u) / alpha_c.
+      scales='crr'       alpha_c per channel and one global strength mu (WCRR's mechanism at a fixed noise level), both
+                         log-parametrised: Phi_c(u) = mu * phi_c(alpha_c u) / alpha_c.
       scales='crr_sigma' the full WCRR mechanism: alpha_c(sigma) = exp(s_c(sigma)) / (sigma + 1e-5) with s_c a learnable
                          linear spline of the noise level sigma (0-255 units; sigma_knots knots on sigma_range, initialised
-                         at the constant sigma_spline_init), lam global. sigma is given per sample to forward / potential
+                         at the constant sigma_spline_init), mu global. sigma is given per sample to forward / potential
                          (shape (B,)) or taken from `default_sigma`.
-    alpha only moves the knots: the effective slopes are lam * phi_c' for every channel and every sigma, so the Lipschitz
-    and weak-convexity bounds do not depend on alpha or sigma.  J_{Phi_c}(u) = lam * phi_c'(alpha_c u).
-    Conservative: Phi_c = psi_c' with psi_c(u) = lam / alpha_c * int_0^{alpha_c u} phi_c."""
+    alpha only moves the knots: the effective slopes are mu * phi_c' for every channel and every sigma, so the Lipschitz
+    and weak-convexity bounds do not depend on alpha or sigma.  J_{Phi_c}(u) = mu * phi_c'(alpha_c u).
+    Conservative: Phi_c = psi_c' with psi_c(u) = mu / alpha_c * int_0^{alpha_c u} phi_c."""
     is_conservative = True
 
     def __init__(self, groups, group_size=1, n_knots=201, span=4.0, slope_min=-1.0, slope_max=1.0, scales="crr",
-                 alpha_init=1.0, lambda_init=math.exp(4.0), lambda_max=math.exp(10.0), learn_scales=True,
+                 alpha_init=1.0, mu_init=math.exp(4.0), mu_max=math.exp(10.0), learn_scales=True,
                  parametrization="slopes", antisymmetric=False, sigma_knots=11, sigma_range=(0.0, 30.0),
-                 sigma_spline_init=5.0, default_sigma=25.0, shared=False, compile=True):
+                 sigma_spline_init=5.0, default_sigma=25.0, shared=False, compile=True, lambda_init=None, lambda_max=None):
         super().__init__(groups, group_size)
+        if lambda_init is not None:  # legacy names of the strength (called lambda before the paper's notation changed to mu)
+            mu_init = lambda_init
+        if lambda_max is not None:
+            mu_max = lambda_max
         K = int(n_knots) + (1 - int(n_knots) % 2)  # odd number of knots so that 0 is a knot
         self.K, self.span, self.h, self.mid = K, float(span), 2 * float(span) / (K - 1), (K - 1) // 2
         self.t_min = -self.span
@@ -113,8 +117,8 @@ class LinearSplineActivation(GroupActivation):
         self.shared = bool(shared)
         self.theta = nn.Parameter(torch.zeros(1 if self.shared else self.G, n))  # zero spline at init
         self.learn_scales = bool(learn_scales)
-        self.log_lambda = nn.Parameter(torch.tensor(math.log(float(lambda_init))), requires_grad=self.learn_scales)
-        self.lambda_max = float(lambda_max)
+        self.log_mu = nn.Parameter(torch.tensor(math.log(float(mu_init))), requires_grad=self.learn_scales)
+        self.mu_max = float(mu_max)
         if scales == "crr":
             self.log_alpha = nn.Parameter(math.log(float(alpha_init)) * torch.ones(1, self.G, 1, 1, 1), requires_grad=self.learn_scales)
         else:
@@ -137,22 +141,22 @@ class LinearSplineActivation(GroupActivation):
         return torch.lerp(c[:, i0].T, c[:, i0 + 1].T, frac)
 
     def _scales(self, sigma=None):
-        """(a, o, lam): input scale a and output scale o, (1 or B, G, 1, 1, 1), and the global strength lam."""
-        lam = torch.exp(self.log_lambda).clamp(max=self.lambda_max)
+        """(a, o, mu): input scale a and output scale o, (1 or B, G, 1, 1, 1), and the global strength mu."""
+        mu = torch.exp(self.log_mu).clamp(max=self.mu_max)
         if self.scales == "crr":
             a = torch.exp(self.log_alpha)
-            return a, 1.0 / a, lam
+            return a, 1.0 / a, mu
         if sigma is None:
             sigma = torch.tensor([self.default_sigma], device=self.sigma_spline.device, dtype=self.sigma_spline.dtype)
         sigma = sigma.to(self.sigma_spline.dtype).flatten()
         # the official parametrisation exp(spline(sigma)) / (sigma + eps); contiguous so that broadcasts keep the input layout
         a = (torch.exp(self.sigma_log_scale(sigma)) / (sigma.view(-1, 1) + 1e-5)).reshape(-1, self.G, 1, 1, 1).contiguous()
-        return a, 1.0 / a, lam
+        return a, 1.0 / a, mu
 
     def gain(self):
-        """(G,) multiplier of the spline slopes in the effective Jacobian (= lam, sigma-free)."""
-        a, o, lam = self._scales()
-        return (lam * o * a)[0].flatten()
+        """(G,) multiplier of the spline slopes in the effective Jacobian (= mu, sigma-free)."""
+        a, o, mu = self._scales()
+        return (mu * o * a)[0].flatten()
 
     def sigma_curves(self, n=61):
         """(sigmas (n,), alpha (G, n)): the input scales alpha_c(sigma) over the noise range (crr_sigma only)."""
@@ -180,17 +184,17 @@ class LinearSplineActivation(GroupActivation):
         return c - c[:, self.mid:self.mid + 1]
 
     def forward(self, u, sigma=None):
-        a, o, lam = self._scales(sigma)
+        a, o, mu = self._scales(sigma)
         c = self.coefficients()
         if o.shape[0] == 1:  # per-channel output scale: folded into the table
-            table = (c * (lam * o).view(self.G, 1)).reshape(-1)
+            table = (c * (mu * o).view(self.G, 1)).reshape(-1)
             return spline_lookup(u, a / self.h, self.mid_t, table, self.offsets, self.K, self.compile)
-        table = (c * lam).reshape(-1)  # per-sample scales (sigma per sample)
+        table = (c * mu).reshape(-1)  # per-sample scales (sigma per sample)
         return spline_lookup(u, a / self.h, self.mid_t, table, self.offsets, self.K, self.compile) * o
 
     def potential(self, u, sigma=None):
         """(B,) sum over channels and pixels of psi_c(u), the potential whose gradient is the activation."""
-        a, o, lam = self._scales(sigma)
+        a, o, mu = self._scales(sigma)
         c = self.coefficients()
         P = torch.cat([c.new_zeros(self.G, 1), torch.cumsum(0.5 * (c[:, 1:] + c[:, :-1]) * self.h, dim=1)], dim=1)
         P = P - P[:, self.mid:self.mid + 1]  # int_0^{t_i} phi_c (trapezoids are exact for a linear spline)
@@ -206,7 +210,7 @@ class LinearSplineActivation(GroupActivation):
         v = u * a  # linear continuation of the integral outside the knots (phi is constant there)
         ext = (v - self.span).clamp(min=0) * c[:, -1].view(1, self.G, 1, 1, 1) + \
               (v + self.span).clamp(max=0) * c[:, 0].view(1, self.G, 1, 1, 1)
-        return (lam * o / a * (inside + ext)).sum(dim=(1, 2, 3, 4))
+        return (mu * o / a * (inside + ext)).sum(dim=(1, 2, 3, 4))
 
     # ---- bounds / certificate ----
     def max_block_norm(self):
@@ -227,10 +231,10 @@ class LinearSplineActivation(GroupActivation):
         lo, hi = self.block_eig_range()
         sl = self.slopes()
         smin, smax = sl.min(dim=1).values, sl.max(dim=1).values
-        a, _, lam = self._scales()
+        a, _, mu = self._scales()
         return {"monotone": bool(lo.min() >= -rho), "conservative": True,
                 "min_slope": float(smin.min()), "max_slope": float(smax.max()),
-                "frac_nonmonotone": float((smin < 0).float().mean()), "lambda": float(lam), "alpha_mean": float(a.mean())}
+                "frac_nonmonotone": float((smin < 0).float().mean()), "mu": float(mu), "alpha_mean": float(a.mean())}
 
     def evaluate_on_grid(self, n=401, margin=1.25, sigma=None):
         """Effective nonlinearities on physical inputs: u (G, n) spanning +-margin*span/alpha_c, and Phi_c(u) (G, n)

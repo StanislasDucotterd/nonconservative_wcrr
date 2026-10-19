@@ -3,8 +3,8 @@
   * filter pairs: aligned / flipped / in-between counts (cos > 0.9, cos < -0.5), cosine range of the flipped pairs, the fraction
     of ||v_c|| orthogonal to w_c (mean over aligned and over flipped pairs), the range of ||v_c|| / ||w_c||;
   * the spline: slope on the first cell, peak value and position, phi(0.09) / peak, where psi stops being convex, min slope,
-    lambda and the Lipschitz bound lambda * max |phi'|;
-  * the skew fraction s = ||(J - J^T)/2||_F / ||J||_F at x = 0 on a full-size image (linear regime, J = lambda phi'(0) V^T W),
+    mu and the Lipschitz bound mu * max |phi'|;
+  * the skew fraction s = ||(J - J^T)/2||_F / ||J||_F at x = 0 on a full-size image (linear regime, J = mu phi'(0) V^T W),
     matrix-free with Gaussian probes (forward-mode jvp, reverse-mode vjp);
   * the extreme eigenvalues of Sym J_M at the denoising fixed points (sigma = 25) of full BSD68 images, matrix-free by shifted
     power iterations; the Rayleigh quotient reached by the shifted iteration is an upper bound on the smallest eigenvalue, so a
@@ -80,13 +80,13 @@ def main():
     act = field.act
     with torch.no_grad():
         c = act.coefficients()[0].cpu().numpy(); t = (np.arange(act.K) - act.mid) * float(act.h)
-        lam = float(torch.exp(act.log_lambda)) if hasattr(act, "log_lambda") else None
+        mu = float(torch.exp(act.log_mu)) if hasattr(act, "log_mu") else None
     pos = t >= 0; tp, cp = t[pos], c[pos]
     slopes = np.diff(cp) / float(act.h)
     k = int(cp.argmax())
     # psi convex while phi increases: first knot after which the slope is negative
     first_neg = int(np.argmax(slopes < 0)) if (slopes < 0).any() else None
-    out["spline"] = {"knots": int(act.K), "span": float(act.span), "h": float(act.h), "lambda": lam,
+    out["spline"] = {"knots": int(act.K), "span": float(act.span), "h": float(act.h), "mu": mu,
                      "slope_first_cell": float(slopes[0]), "slope_min": float(slopes.min()), "slope_max": float(slopes.max()),
                      "peak_value": float(cp[k]), "peak_at": float(tp[k]),
                      "phi_0.09_over_peak": float(np.interp(0.09, tp, cp) / cp[k]), "phi_at_span": float(cp[-1]),

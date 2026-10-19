@@ -20,8 +20,8 @@ def _fmt(ax, nx=5, ny=5):
 
 def spline_stats(act):
     with torch.no_grad():
-        a, _, lam = act._scales()
-        return {"alpha": a.flatten().cpu(), "gain": act.gain().cpu(), "lambda": float(lam), "slopes": act.slopes().cpu()}
+        a, _, mu = act._scales()
+        return {"alpha": a.flatten().cpu(), "gain": act.gain().cpu(), "mu": float(mu), "slopes": act.slopes().cpu()}
 
 
 @torch.no_grad()
@@ -50,7 +50,7 @@ def shared_spline_figure(field):
     ax.set_xlim(act.t_min, act.span)
     ax.set_xlabel("v = alpha_c(sigma) u")
     ax.set_ylabel("phi(v)")
-    ax.set_title(f"shared spline: slopes in [{float(sl.min()):+.2f}, {float(sl.max()):+.2f}] (allowed [{act.slope_min:g}, {act.slope_max:g}]); lambda = {lam:.4g}", fontsize=8)
+    ax.set_title(f"shared spline: slopes in [{float(sl.min()):+.2f}, {float(sl.max()):+.2f}] (allowed [{act.slope_min:g}, {act.slope_max:g}]); mu = {lam:.4g}", fontsize=8)
     _fmt(ax, 7, 7)
     fig.tight_layout()
     return fig
@@ -66,7 +66,7 @@ def spline_figure(field, ncols=8, n=801, data_quantiles=None, xlim=0.1):
     if getattr(act, "shared", False):
         return shared_spline_figure(field)
     st = spline_stats(act)
-    a, lam, sl = st["alpha"], st["lambda"], st["slopes"]
+    a, lam, sl = st["alpha"], st["mu"], st["slopes"]
     G = a.shape[0]
     q90 = None if data_quantiles is None else data_quantiles[-1].cpu()
     with torch.no_grad():
@@ -93,7 +93,7 @@ def spline_figure(field, ncols=8, n=801, data_quantiles=None, xlim=0.1):
         _fmt(ax)
         if c // ncols == nrows - 1:
             ax.set_xlabel("u (input units)", fontsize=6)
-    extra = f";  lambda = {lam:.4g}" if act.scales == "crr" else ""
+    extra = f";  mu = {lam:.4g}" if act.scales == "crr" else ""
     band = ";  grey: |u| <= 90% quantile of |Wx|" if q90 is not None else ""
     fig.suptitle(f"Phi_c(u) for u in [-{xlim:g}, {xlim:g}] (constant beyond the knots +-{act.span:g}/alpha_c), y zoomed per channel{band}{extra}", fontsize=9)
     fig.tight_layout()
@@ -101,7 +101,7 @@ def spline_figure(field, ncols=8, n=801, data_quantiles=None, xlim=0.1):
 
 
 def spline_overlay_figure(field):
-    """All raw splines phi_c(v) on their own coordinate v in [-span, span] (shape only: alpha and lambda factored out)."""
+    """All raw splines phi_c(v) on their own coordinate v in [-span, span] (shape only: alpha and mu factored out)."""
     plt = _mpl()
     act = field.act
     with torch.no_grad():
@@ -153,5 +153,5 @@ def plot_linear_splines(field, path, ncols=10, data_quantiles=None):
     st = spline_stats(field.act)
     sl = st["slopes"]
     return {"min_slope": sl.min(dim=1).values.tolist(), "max_slope": sl.max(dim=1).values.tolist(),
-            "alpha": st["alpha"].tolist(), "gain": st["gain"].tolist(), "lambda": st["lambda"],
+            "alpha": st["alpha"].tolist(), "gain": st["gain"].tolist(), "mu": st["mu"],
             "range_u": (field.act.span / st["alpha"]).tolist()}

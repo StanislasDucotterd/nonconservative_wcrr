@@ -210,7 +210,7 @@ class Trainer:
 
     def resume(self, path):
         ck = torch.load(path, map_location=self.device, weights_only=False)
-        self.field.load_state_dict(ck["field"])
+        self.field.load_state_dict(legacy_keys(ck["field"]))
         self.optimizer.load_state_dict(ck["optimizer"])
         self.scheduler.load_state_dict(ck["scheduler"])
         self.step = ck["step"]
@@ -219,11 +219,16 @@ class Trainer:
         print(f"resumed from {path} at epoch {self.start_epoch}")
 
 
+def legacy_keys(state_dict):
+    """Checkpoints saved before the strength was renamed from lambda to mu (the paper's notation) hold `log_lambda`."""
+    return {k.replace(".log_lambda", ".log_mu"): v for k, v in state_dict.items()}
+
+
 def load_checkpoint(path, device="cpu"):
     """Rebuild (field, denoiser, config) from a checkpoint."""
     ck = torch.load(path, map_location=device, weights_only=False)
     cfg = ck["config"]
     field = build_field(cfg["model"]).to(device)
-    field.load_state_dict(ck["field"])
+    field.load_state_dict(legacy_keys(ck["field"]))
     model = build_denoiser(field, cfg.get("denoiser", {})).to(device).eval()
     return field, model, cfg

@@ -26,7 +26,7 @@ def random_field(dev, untied=None, channels=(1, 4, 8, 12), **act):
     f = RidgeField(channels=list(channels), activation={**SPLINE, **act}, untied=untied).to(dev).double()
     with torch.no_grad():
         f.act.theta.copy_(3 * torch.randn_like(f.act.theta))
-        f.act.log_lambda.fill_(1.0)
+        f.act.log_mu.fill_(1.0)
         if f.untied:
             f.delta.add_(0.3 * torch.randn_like(f.delta))
     return f
@@ -64,9 +64,9 @@ def test_solvers_and_implicit_gradient(dev):
         xg, ig = fista(Gl, torch.zeros(1, 1, 1, n), 1.0 / float(torch.linalg.matrix_norm(A, 2)), tol=1e-12, max_iter=5000, stop="change")
         ref = torch.linalg.solve(A, c.T).T
         check("SAGD (accelerated gradient with restart) solves a convex problem", (xg.view(1, n) - ref).norm() / ref.norm() < 1e-8, f"iters {ig.iterations.max():.0f}")
-        # implicit gradient vs unrolled autograd on tiny fields (lambda = 0.8 so that Lip(M) < 1 and the unrolled reference converges)
+        # implicit gradient vs unrolled autograd on tiny fields (mu = 0.8 so that Lip(M) < 1 and the unrolled reference converges)
         for untied in (None, "delta_last"):
-            f = RidgeField(channels=(1, 4, 8), kernel_sizes=(3, 3), activation={**SPLINE, "n_knots": 9, "lambda_init": 0.8}, untied=untied).to(dev)
+            f = RidgeField(channels=(1, 4, 8), kernel_sizes=(3, 3), activation={**SPLINE, "n_knots": 9, "mu_init": 0.8}, untied=untied).to(dev)
             with torch.no_grad():
                 f.act.theta.copy_(torch.randn_like(f.act.theta))
                 if f.untied:
@@ -100,7 +100,7 @@ def test_linear_spline(dev):
     check("spline: zero at init (output and Lipschitz bound)", act(u).abs().max().item() == 0.0 and float(act.max_block_norm().max()) == 0.0)
     with torch.no_grad():
         act.theta.copy_(3 * torch.randn_like(act.theta))  # most slopes saturate at +-1
-        act.log_alpha.copy_(2 + torch.randn_like(act.log_alpha)); act.log_lambda.fill_(1.5)
+        act.log_alpha.copy_(2 + torch.randn_like(act.log_alpha)); act.log_mu.fill_(1.5)
     sl = act.slopes()
     check("spline: slopes in [-1, 1], phi(0) = 0", bool(sl.min() >= -1) and bool(sl.max() <= 1) and float(act.coefficients()[:, act.mid].abs().max()) == 0.0)
     g = torch.autograd.grad(act.potential(u).sum(), u)[0]
@@ -111,17 +111,17 @@ def test_linear_spline(dev):
     g2 = torch.autograd.grad(act.potential(u2).sum(), u2)[0]
     err2 = (g2 - act(u2)).abs().max().item()
     check("spline = gradient of its potential (beyond the knots, constant continuation)", err2 < 1e-10, f"{err2:.1e}")
-    raw = LinearSplineActivation(G, 1, n_knots=41, span=2.0, compile=False, learn_scales=True).to(dev).double()  # alpha = 1, lambda = 1
+    raw = LinearSplineActivation(G, 1, n_knots=41, span=2.0, compile=False, learn_scales=True).to(dev).double()  # alpha = 1, mu = 1
     with torch.no_grad():
-        raw.theta.copy_(act.theta); raw.log_lambda.zero_()
+        raw.theta.copy_(act.theta); raw.log_mu.zero_()
     ref = lam * raw(u.detach() * a) / a
     err = (act(u) - ref).abs().max().item()
-    check("spline(crr): Phi = lambda * phi(alpha u) / alpha", err < 1e-12, f"{err:.1e}")
+    check("spline(crr): Phi = mu * phi(alpha u) / alpha", err < 1e-12, f"{err:.1e}")
     errL = (act.max_block_norm() - lam * act.slopes().abs().max(dim=1).values).abs().max().item()
-    check("spline(crr): Lipschitz bound = lambda * max|slope| (alpha-free)", errL < 1e-12, f"{errL:.1e}")
+    check("spline(crr): Lipschitz bound = mu * max|slope| (alpha-free)", errL < 1e-12, f"{errL:.1e}")
     v = torch.randn_like(u)
     jv = torch.func.jvp(act, (u.detach(),), (v,))[1]
-    with torch.no_grad():  # exact Jacobian: lambda * slope of the cell containing alpha u (0 beyond the knots)
+    with torch.no_grad():  # exact Jacobian: mu * slope of the cell containing alpha u (0 beyond the knots)
         t = act.mid + u.detach() * a / act.h
         inside = (t >= 0) & (t <= act.K - 1)
         cell = t.clamp(0, act.K - 2).floor().long()
@@ -134,7 +134,7 @@ def test_linear_spline(dev):
     if dev.startswith("cuda"):
         act_c = LinearSplineActivation(G, 1, n_knots=41, span=2.0, compile=True).to(dev)
         with torch.no_grad():
-            act_c.theta.copy_(act.theta.float()); act_c.log_alpha.copy_(act.log_alpha.float()); act_c.log_lambda.copy_(act.log_lambda.float())
+            act_c.theta.copy_(act.theta.float()); act_c.log_alpha.copy_(act.log_alpha.float()); act_c.log_mu.copy_(act.log_mu.float())
             xb = 0.02 * torch.randn(64, G, 1, 64, 64, device=dev)
             ab = act_c(xb)  # compiled (no graph)
         bb = act_c(xb.clone().requires_grad_(True)).detach()  # eager (graph)
@@ -177,8 +177,8 @@ def test_linear_spline(dev):
     ubg = ub.clone().requires_grad_(True)
     gS = torch.autograd.grad(actS.potential(ubg, sigma=sig).sum(), ubg)[0]
     check("spline(crr_sigma): gradient of the potential", float((gS - yb).abs().max()) < 1e-10, f"{float((gS - yb).abs().max()):.1e}")
-    check("spline(crr_sigma): Lipschitz gain independent of sigma (= lambda)", float((actS.gain() - lam).abs().max()) < 1e-12)
-    fS = RidgeField(channels=[1, 4, 8, 6], untied="delta_last", activation={**SPLINE, "n_knots": 9, "scales": "crr_sigma", "lambda_init": 0.8}).to(dev).double()
+    check("spline(crr_sigma): Lipschitz gain independent of sigma (= mu)", float((actS.gain() - lam).abs().max()) < 1e-12)
+    fS = RidgeField(channels=[1, 4, 8, 6], untied="delta_last", activation={**SPLINE, "n_knots": 9, "scales": "crr_sigma", "mu_init": 0.8}).to(dev).double()
     with torch.no_grad():
         fS.act.theta.copy_(torch.randn_like(fS.act.theta)); fS.delta.add_(0.05 * torch.randn_like(fS.delta))
     den = FixedPointDenoiser(fS, solver="agd", stop="change", tol=1e-10, max_iter=2000, backward="anderson").to(dev).eval()

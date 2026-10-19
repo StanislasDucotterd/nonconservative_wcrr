@@ -28,7 +28,7 @@
       "alpha_init": 1.0,
       "antisymmetric": true,
       "default_sigma": 25.0,
-      "lambda_init": 54.6,
+      "mu_init": 54.6,
       "n_knots": 101,
       "scales": "crr_sigma",
       "shared": true,
